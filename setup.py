@@ -12,5 +12,5 @@ setup(name='surveyhelper',
 	  author_email="pysurveyhelper@gmail.com",
 	  license='MIT',
 	  packages=['surveyhelper'],
-	  install_requires=['beautifulsoup4',],
+	  install_requires=['beautifulsoup4', 'pandas'],
 	  zip_safe=False)

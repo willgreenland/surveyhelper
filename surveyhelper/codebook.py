@@ -16,7 +16,7 @@ class Codebook:
         self.survey_title = survey_title
         self.questions = OrderedDict()
         for q in questions_list:
-            self.questions[q.tag] = q
+            self.questions[q.label] = q
 
     def get_question(self, qname):
         if qname in self.questions:
@@ -33,3 +33,13 @@ class Codebook:
             v.pretty_print()
             print()
         return
+
+    def get_variable_names(self):
+        """
+        Returns a list of all of the variable names associated with the
+        questions in the codebook.
+        """
+        vars = []
+        for q in self.get_questions():
+            vars += q.get_variable_names()
+        return(vars)

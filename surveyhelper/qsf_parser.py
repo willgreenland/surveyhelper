@@ -7,8 +7,8 @@ import re
 import logging
 from pprint import pprint
 from bs4 import BeautifulSoup
-from surveyhelper.codebook import Codebook
-from surveyhelper.question import Question, AtomicQuestion
+from surveyhelper import SelectOneQuestion, SelectMultipleQuestion, \
+SelectOneMatrixQuestion, SelectMultipleMatrixQuestion, Codebook
 
 class QsfParser:
 
@@ -143,7 +143,7 @@ class QsfParser:
                 logging.info("Skipping question {}\n\nType: {}\nSelector: {}")
         return(questions)
 
-    def __recode_exclusions(self, exclusions, recode):
+    def _recode_exclusions(self, exclusions, recode):
         exclusions_rcd = {}
         for k, v in exclusions.items():
             if v != "No":
@@ -154,14 +154,14 @@ class QsfParser:
                 exclusions_rcd[int(k)] = True
         return(exclusions_rcd)
 
-    def __parse_recode_values(self, json):
+    def _parse_recode_values(self, json):
         if 'RecodeValues' in json:
             recode = json['RecodeValues']
         else:
             recode = {}
         return(recode)
 
-    def __parse_analyze_choices(self, json):
+    def _parse_analyze_choices(self, json):
         if 'AnalyzeChoices' in json:
             exclude = json['AnalyzeChoices']
         else:
@@ -169,7 +169,7 @@ class QsfParser:
         return(exclude)   
 
 
-    def build_sr_question(self, text, tag, choices, recode, var,
+    def build_sr_question(self, text, label, choices, recode, var,
         provides_int, exclusions):
         """
         """
@@ -181,13 +181,25 @@ class QsfParser:
             choices_rcd[int(v)] = choices_cln[k]
         for k in choices_cln.keys() - recode.keys():
             choices_rcd[int(k)] = choices_cln[k]
-        exclusions_rcd = self.__recode_exclusions(exclusions, recode)
-        return(AtomicQuestion(txt_cln, tag, choices_rcd, var, 
-               provides_int, None, exclusions_rcd))
+        exclusions_rcd = self._recode_exclusions(exclusions, recode)
+
+        choices_text = []
+        values = []
+        for k in sorted(choices_rcd.keys()):
+            values.append(k)
+            choices_text.append(choices_rcd[k])
+        exclude = []
+        for v in values:
+            if v in exclusions_rcd:
+                exclude.append(True)
+            else:
+                exclude.append(False)
+        return(SelectOneQuestion(txt_cln, var, choices_text, label, 
+               values, exclude))
 
     def build_sqsr(self, json):
-        recode = self.__parse_recode_values(json)
-        exclude = self.__parse_analyze_choices(json)
+        recode = self._parse_recode_values(json)
+        exclude = self._parse_analyze_choices(json)
         q = self.build_sr_question(json['QuestionText'], 
             json['DataExportTag'], json['Choices'], recode, 
             json['DataExportTag'], True, exclude)
@@ -196,10 +208,10 @@ class QsfParser:
     def build_mqsr(self, json):
         stem_text = QsfParser.remove_html(json['QuestionText'])
         tag = json['DataExportTag']
-        recode = self.__parse_recode_values(json)
-        exclude = self.__parse_analyze_choices(json)
+        recode = self._parse_recode_values(json)
+        exclude = self._parse_analyze_choices(json)
 
-        children = []
+        questions = []
         for k in json['ChoiceOrder']:
             text = json['Choices'][str(k)]['Display']
             if 'ChoiceDataExportTags' in json and json['ChoiceDataExportTags']:
@@ -208,10 +220,10 @@ class QsfParser:
                 var = "{}_{}".format(tag, k)
             q = self.build_sr_question(text, tag, json['Answers'], 
                 recode, var, True, exclude)
-            children.append(q)
-        return(Question(stem_text, tag, children))
+            questions.append(q)
+        return(SelectOneMatrixQuestion(stem_text, tag, questions))
 
-    def build_mr_question(self, text, tag, choices, recode, var_base,
+    def build_mr_question(self, text, label, choices, recode, var_base,
         provides_int, exclusions):
         """
         """
@@ -227,25 +239,25 @@ class QsfParser:
             choices_rcd[int(k)] = choices_cln[k]
             recode_inverse[int(k)] = int(k)
 
-        exclusions_rcd = self.__recode_exclusions(exclusions, recode)
-        children = []
+        exclusions_rcd = self._recode_exclusions(exclusions, recode)
+        ans_choices = []
+        variables = []
+        exclude = []
         for c in sorted(choices_rcd.keys()):
-            sub_text = choices_rcd[c]
+            ans_choices.append(choices_rcd[c])
             orig_pos = recode_inverse[c]
-            var = "{}_{}".format(var_base, orig_pos)
-            ans = {1: "Selected"}
+            variables.append("{}_{}".format(var_base, orig_pos))
             if c in exclusions_rcd:
-                exclude = {1: True}
+                exclude.append(True)
             else:
-                exclude = {}
-            sq = AtomicQuestion(sub_text, tag, ans, var, True, None, exclude)
-            children.append(sq)
-        return(Question(text, tag, children))
+                exclude.append(False)
+        return(SelectMultipleQuestion(text, variables, ans_choices,
+            label, exclude))
 
 
     def build_sqmr(self, json):
-        recode = self.__parse_recode_values(json)
-        exclude = self.__parse_analyze_choices(json)
+        recode = self._parse_recode_values(json)
+        exclude = self._parse_analyze_choices(json)
         q = self.build_mr_question(json['QuestionText'], 
             json['DataExportTag'], json['Choices'], recode, 
             json['DataExportTag'], True, exclude)
@@ -254,8 +266,8 @@ class QsfParser:
     def build_mqmr(self, json):
         stem_text = QsfParser.remove_html(json['QuestionText'])
         tag = json['DataExportTag']
-        recode = self.__parse_recode_values(json)
-        exclude = self.__parse_analyze_choices(json)
+        recode = self._parse_recode_values(json)
+        exclude = self._parse_analyze_choices(json)
 
         children = []
         for k in json['ChoiceOrder']:
@@ -267,6 +279,6 @@ class QsfParser:
             q = self.build_mr_question(text, var, json['Answers'], 
                 recode, var, True, exclude)
             children.append(q)
-        return(Question(stem_text, tag, children))
+        return(SelectMultipleMatrixQuestion(stem_text, tag, children))
 
                 
