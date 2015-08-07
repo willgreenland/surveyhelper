@@ -59,12 +59,17 @@ class SelectOneMatrixQuestion(MatrixQuestion):
 
     def get_choices(self, remove_exclusions=True, show_values=False):
         self.assert_choices_same()
-        return(self.questions[0].get_choices(remove_exclusions,
+        if len(self.questions) > 0:
+            return(self.questions[0].get_choices(remove_exclusions,
                                              show_values))
+        else:
+            return([])
 
     def frequency_table(self, df, show="ct", pct_format=".0%",
                         remove_exclusions = True, show_totals=True, 
                         show_mean=True, mean_format=".1f"):
+        if len(self.questions) == 0:
+            return(pd.DataFrame())
         data = []
         if show == "ct":
             for q in self.questions:
@@ -131,7 +136,10 @@ class SelectMultipleMatrixQuestion(MatrixQuestion):
 
     def get_choices(self, remove_exclusions=True):
         self.assert_choices_same()
-        return(self.questions[0].get_choices(remove_exclusions))
+        if len(self.questions > 0):
+            return(self.questions[0].get_choices(remove_exclusions))
+        else:
+            []
 
     def frequency_table(self, df, show="ct", pct_format=".0%",
                         remove_exclusions = True, show_totals=True):

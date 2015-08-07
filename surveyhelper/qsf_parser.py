@@ -95,6 +95,20 @@ class QsfParser:
             ordered_qids += qids
         return(ordered_qids)
 
+    def get_dynamic_choice_json(self, locator):
+        other_q = self.qsf['SurveyElements']
+        m = re.search('q://(.+?)/', locator)
+        if m:
+            qid = m.group(1)
+        else:
+            logging.info("No dynamic choices found")
+            return({})
+        for j in self.qsf['SurveyElements']:
+            if j['Element'] == 'SQ' and j['Payload']['QuestionID'] == qid:
+                return(j)
+        return({})
+
+
     def get_question_json(self, qids):
         """
         Given a list of Qualtrics question ids, extract the 
@@ -106,6 +120,13 @@ class QsfParser:
              and e['Payload']['QuestionID'] in qids]
         questions = {}
         for i in q:
+            # if a question pipes in dynamic choices from another question,
+            # pull in those choices
+            p = i['Payload']
+            if 'DynamicChoices' in p and 'Locator' in p['DynamicChoices']:
+                locator = p['DynamicChoices']['Locator']
+                xtra_choices = self.get_dynamic_choice_json(locator)
+                i['Payload']['DynamicChoiceJson'] = xtra_choices['Payload']
             questions[i['Payload']['QuestionID']] = i
         return(questions)
 
@@ -119,11 +140,13 @@ class QsfParser:
         qids = self.get_question_order()
         qid_to_json = self.get_question_json(qids)
 
+
+
         questions = []
         for id in qids:
             json = qid_to_json[id]['Payload']
             if (json['QuestionType'] == 'MC' and 
-            json['Selector'] in ['SAVR', 'SAHR']):
+            json['Selector'] in ['SAVR', 'SAHR', 'DL', 'SACOL']):
                 questions.append(self.build_sqsr(json))
             elif (json['QuestionType'] == 'MC' and 
             json['Selector'] in ['MACOL', 'MAVR']):
@@ -205,6 +228,16 @@ class QsfParser:
             json['DataExportTag'], True, exclude)
         return(q)
 
+    def build_sr_question_from_id(self, id, json, tag, recode, exclude):
+        text = json['Choices'][str(id)]['Display']
+        if 'ChoiceDataExportTags' in json and json['ChoiceDataExportTags']:
+            var = json['ChoiceDataExportTags'][str(id)]
+        else:
+            var = "{}_{}".format(tag, id)
+        q = self.build_sr_question(text, tag, json['Answers'], 
+            recode, var, True, exclude)
+        return(q)
+
     def build_mqsr(self, json):
         stem_text = QsfParser.remove_html(json['QuestionText'])
         tag = json['DataExportTag']
@@ -213,14 +246,16 @@ class QsfParser:
 
         questions = []
         for k in json['ChoiceOrder']:
-            text = json['Choices'][str(k)]['Display']
-            if 'ChoiceDataExportTags' in json and json['ChoiceDataExportTags']:
-                var = json['ChoiceDataExportTags'][str(k)]
-            else:
-                var = "{}_{}".format(tag, k)
-            q = self.build_sr_question(text, tag, json['Answers'], 
-                recode, var, True, exclude)
+            q = self.build_sr_question_from_id(k, json, tag, recode, exclude)
             questions.append(q)
+        if 'DynamicChoiceJson' in json:
+            other_json = json['DynamicChoiceJson']
+            for choice_id in other_json['ChoiceOrder']:
+                text = other_json['Choices'][str(choice_id)]['Display']
+                var = "{}_x{}".format(tag, choice_id)
+                q = self.build_sr_question(text, tag, json['Answers'], 
+                    recode, var, True, exclude)
+                questions.append(q)
         return(SelectOneMatrixQuestion(stem_text, tag, questions))
 
     def build_mr_question(self, text, label, choices, recode, var_base,

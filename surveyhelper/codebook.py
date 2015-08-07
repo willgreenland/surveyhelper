@@ -16,7 +16,13 @@ class Codebook:
         self.survey_title = survey_title
         self.questions = OrderedDict()
         for q in questions_list:
-            self.questions[q.label] = q
+            if q.label in self.questions:
+                k = 1
+                while "{}{}".format(q.label, k) in self.questions:
+                    k += 1
+                self.questions["{}{}".format(q.label, k)] = q
+            else:
+                self.questions[q.label] = q
 
     def get_question(self, qname):
         if qname in self.questions:
