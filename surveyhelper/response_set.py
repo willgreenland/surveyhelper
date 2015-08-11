@@ -3,8 +3,8 @@ import numpy as np
 
 class ResponseSet:
 
-    @staticmethod
-    def get_data(response_file, codebook, skiprows = [1], encoding="utf8"):
+    
+    def __init__(self, response_file, codebook, skiprows = [1], encoding="utf8"):
         df = pd.read_csv(response_file , skiprows=skiprows, encoding=encoding)
         # go through each variable in the codebook and make sure the corresponding 
         # column is integer coded
@@ -19,11 +19,11 @@ class ResponseSet:
                     print("Converting variable {} to integer from {}".format(v, df[v].dtype))
                     df[v] = df[v].convert_objects(convert_numeric=True)
             if matched: matched_questions.append(q)
-        return(df, matched_questions)
+        self.data = df
+        self.matched_questions = matched_questions
+        self.codebook = codebook
 
-
-
-    @staticmethod
-    def get_grouped_data(df, grouping_question):
-        groups = df.groupby(grouping_question.tag)
+    def get_grouped_data(self, grouping_question):
+        groups = self.data.groupby(grouping_question.tag)
+        return(groups)
         

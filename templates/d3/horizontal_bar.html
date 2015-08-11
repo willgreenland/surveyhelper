@@ -22,7 +22,7 @@ var margin = {top: 0, right: 15, bottom: 30, left: margin_left},
     width = total_width - margin.left - margin.right,
     height = total_height - margin.top - margin.bottom;
 x.range([0, width]);
-y.rangeRoundBands([height, 0], .25);
+y.rangeRoundBands([0, height], .25);
 
 
 var xAxis = d3.svg.axis()

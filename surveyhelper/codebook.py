@@ -33,6 +33,9 @@ class Codebook:
     def get_questions(self):
         return([v for k, v in self.questions.items()])
 
+    def list_questions(self):
+        print("\n".join([t for t, q in self.questions.items()]))
+
     def pretty_print(self):
         print("Survey: {}".format(self.survey_title))
         for k, v in self.questions.items():

@@ -7,13 +7,22 @@ from scipy.stats import ttest_ind, f_oneway, chisquare
 class MatrixQuestion:
     __metaclass__ = ABCMeta
 
-    def __init__(self, text, label, questions):
+    def __init__(self, text, label, questions, scale_type='likert'):
         self.text = text
         self.questions = questions
         self.label = label
         self.assert_questions_same_type()
         self.assert_choices_same()
         self.assign_children_to_matrix()
+        self.scale_type = scale_type
+
+    def exclude_choices_from_analysis(self, choices):
+        for q in self.questions:
+            q.exclude_choices_from_analysis(choices)
+
+    def reverse_choices(self, reverse_values=True):
+        for q in self.questions:
+            q.reverse_choices(reverse_values)
 
     def assert_questions_same_type(self):
         if all(type(x) == type(self.questions[0]) for x in self.questions):
@@ -55,13 +64,19 @@ class MatrixQuestion:
     def frequency_table(self):
         pass
 
+    def freq_table_to_json(self, df):
+        return('')
+
+    def questions_to_json(self):
+        return('')
+
 class SelectOneMatrixQuestion(MatrixQuestion):
 
     def get_choices(self, remove_exclusions=True, show_values=False):
         self.assert_choices_same()
         if len(self.questions) > 0:
             return(self.questions[0].get_choices(remove_exclusions,
-                                             show_values))
+                                                 show_values))
         else:
             return([])
 
@@ -131,6 +146,19 @@ class SelectOneMatrixQuestion(MatrixQuestion):
         return(pd.concat(results))
 
 
+    def freq_table_to_json(self, df):
+        t = self.frequency_table(df, "ct", "", True, False, False, "")
+        return(t.iloc[:, 1:].to_json(orient="records"))
+
+    def questions_to_json(self):
+        df = pd.DataFrame({"Question": self.get_children_text()})
+        return(df.to_json(orient="records"))
+
+    def graph_type(self):
+        if self.scale_type == 'likert':
+            return('diverging_bar')
+        else:
+            return('horizontal_stacked_bar')
 
 class SelectMultipleMatrixQuestion(MatrixQuestion):
 
@@ -182,6 +210,20 @@ class SelectQuestion:
         freqs, resp, nonresp = self.tally(df)
         return(resp)
 
+    def exclude_choices_from_analysis(self, choices):
+        new_excl = []
+        for c, e in zip(self.choices, self.exclude_from_analysis):
+            if c in choices:
+                new_excl.append(True)
+            else:
+                new_excl.append(e)
+        self.exclude_from_analysis = new_excl
+
+    def reverse_choices(self, reverse_values=True):
+        self.choices.reverse()
+        self.values.reverse()
+        self.exclude_from_analysis.reverse()
+
     @abstractmethod
     def get_choices(self):
         pass
@@ -210,10 +252,13 @@ class SelectQuestion:
     def frequency_table(self):
         pass
 
+    def questions_to_json(self):
+        return()
+
 class SelectOneQuestion(SelectQuestion):
 
     def __init__(self, text, var, choices, label, values, 
-                 exclude_from_analysis, matrix=None):
+                 exclude_from_analysis, matrix=None, scale_type='likert'):
         self.text = text
         # list of text choices in order
         self.choices = choices
@@ -222,6 +267,7 @@ class SelectOneQuestion(SelectQuestion):
         self.values = values
         self.exclude_from_analysis = exclude_from_analysis
         self.matrix = matrix
+        self.scale_type = scale_type
 
     def get_variable_names(self):
         return([self.variable])
@@ -427,16 +473,25 @@ class SelectOneQuestion(SelectQuestion):
         else:
             return(False)
 
+    def freq_table_to_json(self, df):
+        t = self.frequency_table(df, True, True, True, ".9f", True, False, False)
+        t.columns = ["category", "count", "pct"]
+        return(t.to_json(orient="records"))
+
+    def graph_type(self):
+        return('horizontal_bar')
+
 class SelectMultipleQuestion(SelectQuestion):
 
     def __init__(self, text, vars, choices, label, exclude_from_analysis,
-                 matrix=None):
+                 matrix=None, scale_type='likert'):
         self.text = text
         self.choices = choices
         self.label = label
         self.variables = vars
         self.exclude_from_analysis = exclude_from_analysis
         self.matrix = matrix
+        self.scale_type = scale_type
 
     def get_variable_names(self):
         return(self.variables)
@@ -621,3 +676,11 @@ class SelectMultipleQuestion(SelectQuestion):
             sigs.append(p < pval)
         print("sigs is {}".format(sigs))
         return(sigs)
+
+    def freq_table_to_json(self, df):
+        t = self.frequency_table(df, True, True, True, False, ".9f", True, False)
+        t.columns = ["category", "count", "pct"]
+        return(t.to_json(orient="records"))
+
+    def graph_type(self):
+        return('horizontal_bar')

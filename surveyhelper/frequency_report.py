@@ -34,7 +34,7 @@ class FrequencyReport:
                             [q.freq_table_to_json(self.response_set.data)],
                             q.questions_to_json(),
                             ['all'],
-                            q.graph_type
+                            q.graph_type()
                             ))
         t = template.render(count=len(self.response_set.data),
                                       survey_title=self.report_title,
