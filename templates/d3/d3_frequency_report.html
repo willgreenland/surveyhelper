@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="stylesheet" type="text/css" 
+  href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css" 
+/>
+<link rel="stylesheet" href="survey_frequency.css">
+
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="helpers.js"></script>
+<script src="d3-tip/index.js"></script>
+
+{% for title, table, jsondata, jsonquestions, groups, charttype in questions %}
+{% set outer_loop = loop %}
+{% for d in jsondata %}
+<script type="application/json" id="data{{outer_loop.index}}_group{{loop.index}}">
+    {{d}}
+</script>
+{% endfor %}
+<script type="application/json" id="questions{{loop.index}}">
+    {{jsonquestions}}
+</script>
+
+<script>
+
+</script>
+{% endfor %}
+
+<body>
+
+<title>{{survey_title}}</title>
+
+
+<div class="content">
+<h1 class="center">{{survey_title}}</h1>
+
+{% for title, table, jsondata, jsonquestions, groups, charttype in questions %}
+<h3>{{title}}</h3>
+{% set outer_loop = loop %}
+{% for g in groups %}
+{% if groups|length > 1 %}
+<h4>{{g}}</h4>
+{% endif %}
+{% if charttype == 'horizontal_bar' %}
+  {% with index=outer_loop.index, group = loop.index %}
+  {% include "horizontal_bar.html" %}
+  {% endwith %}
+{% endif %}
+{% if charttype == 'diverging_bar' %}
+  {% with index=outer_loop.index, group = loop.index %}
+  {% include "diverging_bar.html" %}
+  {% endwith %}
+{% endif %}
+{% if charttype == 'stacked_horizontal_bar' %}
+  {% with index=outer_loop.index, group = loop.index %}
+  {% include "stacked_horizontal_bar.html" %}
+  {% endwith %}
+{% endif %}
+{% endfor %}
+{% if (loop.index % 3 == 0) and loop.index < questions|length %}
+<div class="break"></div>
+{% endif %}
+{% endfor %}
+<br />
+<br />
+</div>
+</body>
+</html>

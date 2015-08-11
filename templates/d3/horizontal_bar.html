@@ -1,0 +1,92 @@
+<svg class="chart{{index}}_group{{group}}"></svg>
+
+<script>
+var data = JSON.parse(document.getElementById('data{{index}}_group{{group}}').innerHTML);
+var x = d3.scale.linear();   
+var y = d3.scale.ordinal();
+
+x.domain([0, d3.max(data, function(d) { return d.count; })]);
+y.domain(data.map(function(d) { return d.category; }));
+
+
+var label_lengths = data.map(function(d) {return (d.category.length * 5) + 20});
+var max_label = d3.max(label_lengths);
+var margin_left = Math.min(max_label, 300);
+
+var margin_bottom = 30;
+var total_height = (y.domain().length * 40) + margin_bottom;
+var total_width = 460 + margin_left;
+
+
+var margin = {top: 0, right: 15, bottom: 30, left: margin_left},
+    width = total_width - margin.left - margin.right,
+    height = total_height - margin.top - margin.bottom;
+x.range([0, width]);
+y.rangeRoundBands([height, 0], .25);
+
+
+var xAxis = d3.svg.axis()
+    .scale(x)
+    .orient("bottom");
+
+var yAxis = d3.svg.axis()
+    .scale(y)
+    .orient("left");
+
+var tip = d3.tip()
+  .attr('class', 'd3-tip')
+  .offset([0, 10])
+  .direction('e')
+  .html(function(d) {
+    return d.category + " (n = " + d.count + ")";
+  })
+
+var chart = d3.select(".chart{{index}}_group{{group}}")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+chart.call(tip)
+
+chart.append("g")
+    .attr("class", "y hbaraxis")
+    .call(yAxis)
+  .selectAll(".tick text")
+    .call(wrap, margin.left - 10);
+
+// .attr("transform", "translate(-10,0)")
+chart.selectAll(".wrapped_text")[0].map(
+  function(t) {
+    l = t.getAttribute("numlines");
+    var offset = (l-1)*-6
+    t.setAttribute("transform", "translate(-10," + offset + ")");
+  }
+);
+
+chart.append("g")
+    .attr("class", "x hbaraxis")
+    .attr("transform", "translate(0," + height + ")")
+    .call(xAxis);
+
+var bar = chart.selectAll(".hbar")
+    .data(data)
+  .enter()
+    .append("g")
+    .attr("class", "hbar")
+    .attr("transform", function(d, i) { 
+        return "translate(0," + y(d.category) + ")"; 
+    });
+
+bar.append("rect")
+    .attr("width", function(d) { return x(d.count); })
+    .attr("height", y.rangeBand())
+    .on('mouseover', tip.show)
+    .on('mouseout', tip.hide);
+
+bar.append("text")
+    .attr("x", function(d) {return(Math.max(0, x(d.count) - 25));})
+    .attr("y", function(d) { return y.rangeBand() * .67 ; })
+    .text(function(d) {return Math.round(d.pct*100) + "%"});
+
+</script>

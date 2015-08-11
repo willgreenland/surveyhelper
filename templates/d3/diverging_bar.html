@@ -1,0 +1,264 @@
+<div id="chart{{index}}_group{{group}}"></div>
+
+<script>
+
+var data = JSON.parse(document.getElementById('data{{index}}_group{{group}}').innerHTML);
+var categories = Object.keys(data[0]);
+var numcat = categories.length;
+
+var q = JSON.parse(document.getElementById('questions{{index}}').innerHTML);
+var questions = [];
+q.forEach(function(qs) {questions.push(qs.Question);} );
+var qct = questions.length;
+
+var max_label = d3.max(questions.map(function(q) {return((q.length*5)+20)}));
+var margin_left = Math.min(max_label, 300);
+
+var total_width = 745;
+var margin = {top: 30, right: 15, bottom: 20, left: margin_left},
+    width = total_width - margin.left - margin.right,
+    height = questions.length * 40;
+
+var y = d3.scale.ordinal()
+    .rangeRoundBands([0, height], .25);
+
+var x = d3.scale.linear()
+    .rangeRound([0, width]);
+
+// TODO: do a better job of this
+var colors = ["#FF9147", "#FFAA7A", "#cccccc", "#92c6db", "#086fad"]
+if (numcat == 4) {
+  colors = [colors[0], colors[1], colors[3], colors[4]];
+} else if (numcat == 3) {
+  colors = [colors[0], colors[2], colors[4]];
+} else if (numcat == 2) {
+  colors = [colors[1], colors[3]]
+}
+
+var color = d3.scale.ordinal()
+    .range(colors);
+
+var xAxis = d3.svg.axis()
+    .scale(x)
+    .orient("bottom");
+
+var yAxis = d3.svg.axis()
+    .scale(y)
+    .orient("left")
+
+var tip = d3.tip()
+  .attr('class', 'd3-tip')
+  .offset([0, 10])
+  .direction('e')
+  .html(function(d) {
+    return d.name + " " + Math.round(d.pct) + "% (n = " + d.n + ")";
+  })
+
+var svg = d3.select("#chart{{index}}_group{{group}}").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .attr("id", "d3-plot")
+  .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+svg.call(tip)
+  
+color.domain(categories);
+
+var counter = 0;
+data.forEach(function(d) {
+  // calc percentages
+  var tot = 0;
+  categories.forEach(function(c) { tot += d[c]; });
+  categories.forEach(function(c) {
+      d[c + "_N"] = d[c];
+      d[c + "_pct"] = (d[c]/tot) * 100;
+      d[c] = (d[c]/tot) * 100;
+  });
+
+  //Assume middle of scale is neutral
+  // x0 = left offset of box relative to 0
+  // x1 = right offset of box relative to 0
+  // N = total for this question
+  // n = total for this box
+  // pct = pct of total for this box
+  var x0 = 0;
+  for (i = 0; i < Math.floor(numcat / 2); i++) {
+      x0 += d[categories[i]]
+  };
+
+  if ((numcat % 2) == 1) {
+      var ind = Math.floor(numcat / 2)
+      x0 += (d[categories[ind]] / 2)
+  };
+  x0 = -1 * x0;
+  var idx = -1;
+  d['i'] = counter;
+  counter += 1;
+  d.boxes = color.domain().map(function(cat) { 
+      return {name: cat, 
+              x0: x0, 
+              x1: x0 += d[cat], 
+              N: tot,
+              n: d[categories[idx += 1] + "_N"],
+              pct: d[categories[idx] + "_pct"]}; 
+  });
+});
+
+var min_val = d3.min(data, function(d) { return d.boxes[0].x0; });
+var max_val = d3.max(data, function(d) { return d.boxes[numcat-1].x1;});
+
+x.domain([min_val, max_val]).nice();
+y.domain(questions);
+
+svg.append("g")
+  .attr("class", "x dbaraxis")
+  .call(xAxis)
+  .attr("transform", "translate(0," + height + ")");
+
+svg.append("g")
+  .attr("class", "y dbaraxis")
+  .call(yAxis)
+.selectAll(".tick text")
+  .call(wrap, margin.left-10);
+
+svg.selectAll(".wrapped_text")[0].map(
+  function(t) {
+    l = t.getAttribute("numlines");
+    var offset = (l-1)*-6
+    t.setAttribute("transform", "translate(-10," + offset + ")");
+  }
+);
+
+var qs = svg.selectAll(".question{{index}}_group{{group}}")
+  .data(data)
+.enter().append("g")
+  .attr("class", "bar")
+  .attr("transform", 
+    function(d) { 
+        return "translate(0," + y(questions[d.i]) + ")"; 
+    }
+  );
+
+var bars = qs.selectAll("rect")
+  .data(function(d) { return d.boxes; })
+.enter().append("g").attr("class", "subbar");
+
+bars.append("rect")
+  .attr("height", y.rangeBand())
+  .attr("x", function(d) { return x(d.x0); })
+  .attr("width", function(d) { return x(d.x1) - x(d.x0); })
+  .style("fill", function(d) { return color(d.name); })
+  .on('mouseover', tip.show)
+  .on('mouseout', tip.hide);
+
+// How big does n have to be to be less than 15 px?
+var min_pct = ((x.domain()[1]-x.domain()[0])*15)/width
+
+// Label each bar segment with the percentage
+bars.append("text")
+  .attr("x", function(d) { return x(d.x0)+2; })
+  .attr("y", y.rangeBand()*.67)
+  // .attr("dy", "0.5em")
+  // .attr("dx", "0.5em")
+  .style("text-anchor", "begin")
+  .text(function(d) { 
+    if (d.n !== 0 && d.pct > min_pct) {
+      return Math.round(d.pct) + "%"
+    }
+    else {
+      return("")
+    }
+  });
+
+qs.insert("rect",":first-child")
+  .attr("height", y.rangeBand())
+  .attr("x", "1")
+  .attr("width", width)
+  .attr("fill-opacity", "0")
+  .style("fill", "#F5F5F5")
+  .attr("class", function(d,index) { return index%2==0 ? "even" : "uneven"; });
+
+// Draw the vertical line through x = 0
+svg.append("g")
+  .attr("class", "y dbaraxis truezero")
+.append("line")
+  .attr("x1", x(0))
+  .attr("x2", x(0))
+  .attr("y2", height);
+
+var startp = svg.append("g").attr("class", "legendbox{{index}}_group{{group}}").attr("id", "mylegendbox");
+
+item_widths = categories.map(function(c) {return (c.length * 6) + 28})
+legend_width = item_widths.reduce(function(a, b) {return a + b})
+
+if (legend_width > total_width) {
+  ratio = (total_width / legend_width)
+  item_widths = item_widths.map(function(i) {return Math.round(i * ratio)})
+  legend_width = item_widths.reduce(function(a, b) {return a + b})
+} else if ((2.5*legend_width < total_width)) {
+  item_widths = item_widths.map(function(i) {return i*2})
+  legend_width = item_widths.reduce(function(a, b) {return a + b})
+}
+
+legend_margin = Math.floor((total_width - legend_width) / 2)
+xpos = Math.min(-1*margin.left, 0) + legend_margin
+var legend_tabs = [];
+
+// q.forEach(function(qs) {questions.push(qs.Question);} );
+item_widths.forEach(function(w) {
+    legend_tabs.push(xpos)
+    xpos += w
+  }
+)
+
+var legend = startp.selectAll(".legend")
+  .data(color.domain().slice())
+.enter().append("g")
+  .attr("class", "legend")
+  .attr("transform", function(d, i) { return "translate(" + legend_tabs[i] + ",-40)"; });
+
+legend.append("rect")
+  .attr("x", 0)
+  .attr("width", 18)
+  .attr("height", 18)
+  .style("fill", color);
+
+legend.append("text")
+  .attr("x", 22)
+  .attr("y", 9)
+  .attr("dy", ".35em")
+  .style("text-anchor", "begin")
+  .text(function(d) { return d; });
+
+// svg.selectAll(".dbaraxis path")
+//   .style("fill", "none")
+//   .style("stroke", "#000")
+//   .style("shape-rendering", "crispEdges")
+
+// svg.selectAll(".dbaraxis line")
+//   .style("fill", "none")
+//   .style("stroke", "#000")
+//   .style("shape-rendering", "crispEdges")
+
+// Wrap and place legend text
+svg.selectAll(".legendbox{{index}}_group{{group}} text")
+  .call(wrap, item_widths);
+
+svg.selectAll(".legend .wrapped_text")[0].map(
+  function(t) {
+    l = t.getAttribute("numlines");
+    var offset = (l-1)*-6
+    t.setAttribute("transform", "translate(20," + offset + ")");
+  }
+);
+
+var movesize = width/2 - startp.node().getBBox().width/2;
+movesize = 0;
+svg.selectAll(".legendbox{{index}}_group{{group}}").attr(
+    // uncomment to move legend to bottom
+    //"transform", "translate(" + movesize  + "," + (height + margin.top) + ")"
+    "transform", "translate(" + movesize  + ", 15)"
+);
+</script>
+
