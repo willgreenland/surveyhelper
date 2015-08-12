@@ -2,27 +2,41 @@ from itertools import compress
 import pandas as pd
 import numpy as np
 from abc import ABCMeta, abstractmethod
+from surveyhelper.scale import QuestionScale, LikertScale, NominalScale, OrdinalScale
 from scipy.stats import ttest_ind, f_oneway, chisquare
 
 class MatrixQuestion:
     __metaclass__ = ABCMeta
 
-    def __init__(self, text, label, questions, scale_type='likert'):
+    def __init__(self, text, label, questions):
         self.text = text
         self.questions = questions
         self.label = label
         self.assert_questions_same_type()
         self.assert_choices_same()
         self.assign_children_to_matrix()
-        self.scale_type = scale_type
 
     def exclude_choices_from_analysis(self, choices):
         for q in self.questions:
             q.exclude_choices_from_analysis(choices)
 
-    def reverse_choices(self, reverse_values=True):
+    def reverse_choices(self):
         for q in self.questions:
-            q.reverse_choices(reverse_values)
+            q.reverse_choices()
+
+    def change_scale(self, newtype, values = None, midpoint = None):
+        for q in self.questions:
+            q.change_scale(newtype, values, midpoint)
+
+    def change_midpoint(self, midpoint):
+        for q in self.questions:
+            q.scale.midpoint = midpoint
+
+    def get_scale(self):
+        if len(self.questions) > 0:
+            return(self.questions[0].scale)
+        else:
+            None
 
     def assert_questions_same_type(self):
         if all(type(x) == type(self.questions[0]) for x in self.questions):
@@ -31,7 +45,7 @@ class MatrixQuestion:
             raise(Exception("Questions in a matrix must all have the same type"))
 
     def assert_choices_same(self):
-        if all(x.same_choices(self.questions[0]) for x in self.questions):
+        if all([x.scale == self.questions[0].scale for x in self.questions]):
             return(True)
         else:
             raise(Exception("Questions in a matrix must all have the same choices"))
@@ -50,9 +64,10 @@ class MatrixQuestion:
     def get_children_text(self):
         return([q.text for q in self.questions])
 
-    def pretty_print(self):
+    def pretty_print(self, show_choices=True):
         print("{} ({})".format(self.text, self.label))
-        self.questions[0].pretty_print_answers()
+        if show_choices:
+            self.questions[0].pretty_print_choices(True)
         for q in self.questions:
             print(q.text)
 
@@ -75,8 +90,8 @@ class SelectOneMatrixQuestion(MatrixQuestion):
     def get_choices(self, remove_exclusions=True, show_values=False):
         self.assert_choices_same()
         if len(self.questions) > 0:
-            return(self.questions[0].get_choices(remove_exclusions,
-                                                 show_values))
+            return(self.questions[0].scale.choices_to_str(remove_exclusions,
+                                                          show_values))
         else:
             return([])
 
@@ -101,7 +116,7 @@ class SelectOneMatrixQuestion(MatrixQuestion):
         else:
             raise(Exception("Invalid 'show' parameter: {}".format(show)))
         tbl = pd.DataFrame(data)
-        tmpcols = self.get_choices(remove_exclusions, show_mean)
+        tmpcols = self.get_choices(remove_exclusions)
 
         if show_totals:
             tmpcols.append("Total")
@@ -155,10 +170,13 @@ class SelectOneMatrixQuestion(MatrixQuestion):
         return(df.to_json(orient="records"))
 
     def graph_type(self):
-        if self.scale_type == 'likert':
-            return('diverging_bar')
+        if len(self.questions) > 0:
+            if type(self.questions[0].scale) == LikertScale:
+                return('diverging_bar')
+            else:
+                return('horizontal_stacked_bar')
         else:
-            return('horizontal_stacked_bar')
+            return('')
 
 class SelectMultipleMatrixQuestion(MatrixQuestion):
 
@@ -210,23 +228,17 @@ class SelectQuestion:
         freqs, resp, nonresp = self.tally(df)
         return(resp)
 
+    def get_scale(self):
+        return(self.scale)
+
+    def change_scale(self, newtype, values = None, midpoint = None):
+        self.scale = QuestionScale.change_scale(self.scale, newtype)
+
+    def change_midpoint(self, midpoint):
+        self.scale.midpoint = midpoint
+
     def exclude_choices_from_analysis(self, choices):
-        new_excl = []
-        for c, e in zip(self.choices, self.exclude_from_analysis):
-            if c in choices:
-                new_excl.append(True)
-            else:
-                new_excl.append(e)
-        self.exclude_from_analysis = new_excl
-
-    def reverse_choices(self, reverse_values=True):
-        self.choices.reverse()
-        self.values.reverse()
-        self.exclude_from_analysis.reverse()
-
-    @abstractmethod
-    def get_choices(self):
-        pass
+        self.scale.exclude_choices_from_analysis(choices)
 
     @abstractmethod
     def get_variable_names(self):
@@ -237,11 +249,7 @@ class SelectQuestion:
         pass
 
     @abstractmethod
-    def pretty_print_answers(self):
-        pass
-
-    @abstractmethod
-    def same_choices(self):
+    def pretty_print_choices(self):
         pass
 
     @abstractmethod
@@ -253,81 +261,35 @@ class SelectQuestion:
         pass
 
     def questions_to_json(self):
-        return()
+        return('')
 
 class SelectOneQuestion(SelectQuestion):
 
     def __init__(self, text, var, choices, label, values, 
                  exclude_from_analysis, matrix=None, scale_type='likert'):
         self.text = text
-        # list of text choices in order
-        self.choices = choices
         self.label = label
         self.variable = var
-        self.values = values
-        self.exclude_from_analysis = exclude_from_analysis
         self.matrix = matrix
-        self.scale_type = scale_type
+        self.scale = QuestionScale.create_scale(scale_type, choices, 
+                        exclude_from_analysis, values)
 
     def get_variable_names(self):
         return([self.variable])
 
-    def get_choices(self, remove_exclusions=True, show_values=False):
-        choices = self.choices
-        values = self.values
-        if remove_exclusions:
-            choices = list(compress(choices, 
-                      [not x for x in self.exclude_from_analysis]))
-            values = list(compress(values, 
-                      [not x for x in self.exclude_from_analysis]))
-        if show_values:
-            if remove_exclusions:
-                choices = ["{} ({})".format(c, v) for c, v in zip(choices, values)]
-            else:
-                new_choices = []
-                for c, v, x in zip(choices, values, self.exclude_from_analysis):
-                    if x:
-                        new_choices.append("{} (X)".format(c))
-                    else:
-                        new_choices.append("{} ({})".format(c, v))
-                choices = new_choices
-        return(choices)
-
-    def pretty_print(self):
+    def pretty_print(self, show_choices=True):
         print("{} ({})".format(self.text, self.label))
-        for a, b, c in zip(self.choices, self.values, 
-                           self.exclude_from_analysis):
-            if c:
-                print("{} (X)".format(a))
-            else:
-                print("{} ({})".format(a, b))
+        if show_choices:
+            self.pretty_print_choices()
 
-    def pretty_print_answers(self):
-        l = []
-        for a, b, c in zip(self.choices, self.values, 
-                           self.exclude_from_analysis):
-            if c:
-                l.append("{} (X)".format(a))
-            else:
-                l.append("{} ({})".format(a, b))
-        print(", ".join(l))
+    def pretty_print_choices(self):
+        print(", ".join(self.scale.choices_to_str(False)))
 
-    def same_choices(self, other):
-        """
-        Check to see if other has same choices as self
-        """
-        if ((self.choices == other.choices) and
-           (self.values == other.values) and
-           (self.exclude_from_analysis == other.exclude_from_analysis)):
-            return(True)
-        else:
-            return(False)
+    def reverse_choices(self):
+        self.scale.reverse_choices()
 
     def mean(self, df, remove_exclusions=True):
-        values = self.values
-        if remove_exclusions:
-            values = list(compress(values, 
-                     [not x for x in self.exclude_from_analysis]))
+        values = self.scale.get_values(remove_exclusions)
         freq, n, x = self.tally(df, remove_exclusions)
         num = sum([ct * v for ct, v in zip(freq, values)])
         if n > 0:
@@ -344,10 +306,7 @@ class SelectOneQuestion(SelectQuestion):
         unit_record = df[self.variable]
         freqs = dict(unit_record.value_counts())
         cts = []
-        values = self.values
-        if remove_exclusions:
-            values = list(compress(values, 
-                     [not x for x in self.exclude_from_analysis]))
+        values = self.scale.get_values(remove_exclusions)
         for k in values:
             if k in freqs:
                 cts.append(freqs[k])
@@ -358,14 +317,15 @@ class SelectOneQuestion(SelectQuestion):
 
     def frequency_table(self, df, show_question=True, ct=True, 
                         pct=True, pct_format=".0%", remove_exclusions=True,
-                        show_totals=True, show_mean=True, mean_format=".1f"):
+                        show_totals=True, show_mean=True, mean_format=".1f",
+                        show_values=True):
         cts, resp, nonresp = self.tally(df, remove_exclusions)
         data = []
         cols = []
         tots = []
         mean = []
         if show_question:
-            data.append(self.get_choices(remove_exclusions, show_mean))
+            data.append(self.scale.choices_to_str(remove_exclusions, show_values))
             cols.append("Answer")
             tots.append("Total")
             mean.append("Mean")
@@ -404,19 +364,18 @@ class SelectOneQuestion(SelectQuestion):
                         show_mean=True, mean_format=".1f"):
         if type(other_question) != SelectOneQuestion:
             raise(Exception("Can only call cut_by_question on a SelectOneQuestion type"))
-        df = response_set.copy()
+        df = response_set.data.copy()
         # Here we remove the exclusions for the cut variable, the 
         # exclusions for this question are removed in cut_by, if 
         # appropriate
         if remove_exclusions:
-            values_to_drop = [v for v, e in zip(other_question.values, 
-                              other_question.exclude_from_analysis) if e]
+            values_to_drop = other_question.scale.excluded_choices()
             for v in values_to_drop:
                 df[other_question.variable].replace(v, np.nan,
-                                                      inplace=True)
+                                                    inplace=True)
 
         groups = df.groupby(other_question.label)
-        group_mapping = dict(zip(other_question.values, other_question.choices))
+        group_mapping = dict(zip(other_question.scale.values, other_question.scale.choices))
 
         oth_text = cut_var_label
         if not oth_text:
@@ -474,7 +433,8 @@ class SelectOneQuestion(SelectQuestion):
             return(False)
 
     def freq_table_to_json(self, df):
-        t = self.frequency_table(df, True, True, True, ".9f", True, False, False)
+        t = self.frequency_table(df, True, True, True, ".9f", True, False, 
+                                 False, ".1f", False)
         t.columns = ["category", "count", "pct"]
         return(t.to_json(orient="records"))
 
@@ -484,54 +444,35 @@ class SelectOneQuestion(SelectQuestion):
 class SelectMultipleQuestion(SelectQuestion):
 
     def __init__(self, text, vars, choices, label, exclude_from_analysis,
-                 matrix=None, scale_type='likert'):
+                 matrix=None):
         self.text = text
-        self.choices = choices
         self.label = label
         self.variables = vars
-        self.exclude_from_analysis = exclude_from_analysis
         self.matrix = matrix
-        self.scale_type = scale_type
+        self.scale = QuestionScale.create_scale('nominal', choices, 
+                                                exclude_from_analysis)
 
     def get_variable_names(self):
         return(self.variables)
 
-    def get_choices(self, remove_exclusions=True):
-        choices = self.choices
-        if remove_exclusions:
-            choices = list(compress(choices, 
-                      [not x for x in self.exclude_from_analysis]))
-        return(choices)
+    def reverse_choices(self):
+        self.scale.reverse_choices()
+        self.variables.reverse()
 
-    def pretty_print(self):
+    def pretty_print(self, show_choices=True):
         print("{} ({})".format(self.text, self.label))
-        for a, b, c in zip(self.choices, self.variables, 
-                           self.exclude_from_analysis):
-            if c:
-                print("{} (X)".format(a))
-            else:
-                print("{} ({})".format(a, b))
+        if show_choices:
+            self.pretty_print_choices()
 
-
-    def pretty_print_answers(self):
+    def pretty_print_choices(self):
         l = []
-        for a, b, c in zip(self.choices, self.variables, 
-                           self.exclude_from_analysis):
-            if c:
-                l.append("{} (X)".format(a))
+        for c, v, x in zip(self.scale.choices, self.variables, 
+                           self.scale.exclude_from_analysis):
+            if x:
+                l.append("{} (X)".format(c))
             else:
-                l.append("{} ({})".format(a, b))
+                l.append("{} ({})".format(c, v))
         print(", ".join(l))
-
-    def same_choices(self, other):
-        """
-        Check to see if other has same choices as self
-        """
-        if ((self.choices == other.choices) and 
-           (self.exclude_from_analysis == other.exclude_from_analysis)):
-            return(True)
-        else:
-            return(False)
 
     def tally(self, df, remove_exclusions=True):
         """
@@ -542,7 +483,7 @@ class SelectMultipleQuestion(SelectQuestion):
         vars = self.variables
         if remove_exclusions:
             vars = list(compress(vars, 
-                   [not x for x in self.exclude_from_analysis]))
+                   [not x for x in self.scale.exclude_from_analysis]))
         unit_record = df[vars]
         nonrespondents = 0
         respondents = 0
@@ -570,7 +511,7 @@ class SelectMultipleQuestion(SelectQuestion):
         cols = []
         tots = []
         if show_question:
-            data.append(self.get_choices(remove_exclusions))
+            data.append(self.scale.get_choices(remove_exclusions))
             cols.append("Answer")
             tots.append("Total respondents")
         if ct:
@@ -604,13 +545,13 @@ class SelectMultipleQuestion(SelectQuestion):
         # appropriate
         if remove_exclusions:
             values_to_drop = [v for v, e in zip(other_question.values, 
-                              other_question.exclude_from_analysis) if e]
+                              other_question.scale.exclude_from_analysis) if e]
             for v in values_to_drop:
                 df[other_question.variable].replace(v, np.nan,
                                                       inplace=True)
 
         groups = df.groupby(other_question.label)
-        group_mapping = dict(zip(other_question.values, other_question.choices))
+        group_mapping = dict(zip(other_question.scale.values, other_question.scale.choices))
 
         oth_text = cut_var_label
         if not oth_text:
@@ -674,7 +615,6 @@ class SelectMultipleQuestion(SelectQuestion):
             f_exp = [p_choice * ct for ct in ct_by_cut]
             chisq, p = chisquare(f_obs, f_exp)
             sigs.append(p < pval)
-        print("sigs is {}".format(sigs))
         return(sigs)
 
     def freq_table_to_json(self, df):

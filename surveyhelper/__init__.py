@@ -3,6 +3,7 @@ from surveyhelper.codebook import *
 from surveyhelper.qsf_parser import *
 from surveyhelper.response_set import *
 from surveyhelper.frequency_report import *
+from surveyhelper.scale import *
 
 import os
 import glob

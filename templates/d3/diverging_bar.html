@@ -83,15 +83,18 @@ data.forEach(function(d) {
   // n = total for this box
   // pct = pct of total for this box
   var x0 = 0;
-  for (i = 0; i < Math.floor(numcat / 2); i++) {
+  {% if diverging %}
+  for (i = 0; i < Math.floor({{midpoint}}); i++) {
       x0 += d[categories[i]]
   };
 
-  if ((numcat % 2) == 1) {
-      var ind = Math.floor(numcat / 2)
-      x0 += (d[categories[ind]] / 2)
+  if (({{midpoint}} % 1) != 0) {
+      var ind = Math.floor({{midpoint}})
+      var fraction = {{midpoint}} % 1
+      x0 += (d[categories[ind]] * fraction)
   };
   x0 = -1 * x0;
+  {% endif %}
   var idx = -1;
   d['i'] = counter;
   counter += 1;

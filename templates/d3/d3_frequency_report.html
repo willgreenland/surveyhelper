@@ -10,7 +10,7 @@
 <script src="helpers.js"></script>
 <script src="d3-tip/index.js"></script>
 
-{% for title, table, jsondata, jsonquestions, groups, charttype in questions %}
+{% for title, table, jsondata, jsonquestions, groups, charttype, midpoint in questions %}
 {% set outer_loop = loop %}
 {% for d in jsondata %}
 <script type="application/json" id="data{{outer_loop.index}}_group{{loop.index}}">
@@ -34,7 +34,7 @@
 <div class="content">
 <h1 class="center">{{survey_title}}</h1>
 
-{% for title, table, jsondata, jsonquestions, groups, charttype in questions %}
+{% for title, table, jsondata, jsonquestions, groups, charttype, midpoint in questions %}
 <h3>{{title}}</h3>
 {% set outer_loop = loop %}
 {% for g in groups %}
@@ -46,14 +46,14 @@
   {% include "horizontal_bar.html" %}
   {% endwith %}
 {% endif %}
-{% if charttype == 'diverging_bar' %}
+{% if charttype == 'diverging_bar' or charttype == 'horizontal_stacked_bar' %}
+  {% if charttype == 'diverging_bar' %}
+    {% set diverging=True %}
+  {% else %}
+    {% set diverging=False %}
+  {% endif %}
   {% with index=outer_loop.index, group = loop.index %}
   {% include "diverging_bar.html" %}
-  {% endwith %}
-{% endif %}
-{% if charttype == 'stacked_horizontal_bar' %}
-  {% with index=outer_loop.index, group = loop.index %}
-  {% include "stacked_horizontal_bar.html" %}
   {% endwith %}
 {% endif %}
 {% endfor %}

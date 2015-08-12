@@ -26,15 +26,22 @@ class FrequencyReport:
                   extensions=['jinja2.ext.with_'])
         template = env.get_template(self.freq_template)
         outfile = open(self.report_file, 'w+')
+        
         questions = []
         for q in self.response_set.matched_questions:
+            scale = q.get_scale()
+            if scale and hasattr(scale, 'midpoint'):
+                midpoint = scale.midpoint
+            else:
+                midpoint = None
             questions.append((
                             q.text,
                             q.freq_table_to_json(self.response_set.data),
                             [q.freq_table_to_json(self.response_set.data)],
                             q.questions_to_json(),
                             ['all'],
-                            q.graph_type()
+                            q.graph_type(),
+                            midpoint
                             ))
         t = template.render(count=len(self.response_set.data),
                                       survey_title=self.report_title,
