@@ -67,7 +67,7 @@ class MatrixQuestion:
     def pretty_print(self, show_choices=True):
         print("{} ({})".format(self.text, self.label))
         if show_choices:
-            self.questions[0].pretty_print_choices(True)
+            self.questions[0].pretty_print_choices()
         for q in self.questions:
             print(q.text)
 
