@@ -412,7 +412,7 @@ class SelectOneQuestion(SelectQuestion):
                    df.index.tolist()])
 
         # Add hierarchical index to columns
-        col_top_index = [my_label]*len(self.choices)
+        col_top_index = [my_label]*len(self.scale.get_choices(remove_exclusions))
         if show_mean:
             col_top_index += [my_label]
         df.columns = pd.MultiIndex.from_arrays([col_top_index, 

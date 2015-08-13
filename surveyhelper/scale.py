@@ -52,15 +52,16 @@ class QuestionScale():
                 new_excl.append(e)
         self.exclude_from_analysis = new_excl
 
+    def excluded_choices(self):
+        x = list(compress(self.choices, 
+                      [x for x in self.exclude_from_analysis]))
+        return(x)
+
 class NominalScale(QuestionScale):
 
     def __init__(self, choices, exclude_from_analysis):
         super().__init__(choices, exclude_from_analysis)
 
-    def excluded_choices(self):
-        x = list(compress(self.choices, 
-                      [x for x in self.exclude_from_analysis]))
-        return(x)
 
 class OrdinalScale(QuestionScale):
 
